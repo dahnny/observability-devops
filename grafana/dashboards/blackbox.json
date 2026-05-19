@@ -1,0 +1,48 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Probe Success",
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 1, "min": 0}, "overrides": []},
+      "targets": [{"expr": "avg(probe_success)", "refId": "A"}]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP Response Time",
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [{"expr": "probe_duration_seconds", "legendFormat": "{{instance}}", "refId": "A"}]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Uptime Timeline",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "probe_success", "legendFormat": "{{instance}}", "refId": "A"}]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "SSL Expiry Days",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "d"}, "overrides": []},
+      "targets": [{"expr": "(probe_ssl_earliest_cert_expiry - time()) / 86400", "refId": "A"}]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["blackbox"],
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "Blackbox Monitoring",
+  "uid": "blackbox-monitoring",
+  "version": 2
+}

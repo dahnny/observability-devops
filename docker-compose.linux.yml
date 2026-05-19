@@ -1,0 +1,9 @@
+# Linux-only override for deeper host visibility.
+# Use: docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --build
+services:
+  node-exporter:
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /:/host:ro,rslave

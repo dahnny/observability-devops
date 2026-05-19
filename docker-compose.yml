@@ -1,0 +1,128 @@
+services:
+  sample-app:
+    build: ./sample-app
+    ports:
+      - "8000:8000"
+    environment:
+      SERVICE_NAME: sample-app
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    depends_on:
+      - alertmanager
+      - node-exporter
+      - blackbox
+      - dora-exporter
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      # Alertmanager v0.27 does not expand env vars in config files, so the
+      # container renders a temporary config at startup.
+      - sed "s|__SLACK_WEBHOOK_URL__|$${SLACK_WEBHOOK_URL}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && /bin/alertmanager --config.file=/tmp/alertmanager.yml
+    environment:
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-http://localhost:5001}
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+    ports:
+      - "9093:9093"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.1.1
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.6.0
+    command:
+      - -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+      - "4318:4318"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.110.0
+    command:
+      - --config=/etc/otelcol-contrib/otel-collector-config.yml
+    volumes:
+      - ./otel-collector/otel-collector-config.yml:/etc/otelcol-contrib/otel-collector-config.yml:ro
+    ports:
+      - "4317:4317"
+      - "8889:8889"
+    restart: unless-stopped
+    depends_on:
+      - tempo
+      - loki
+
+  dora-exporter:
+    build: ./dora-exporter
+    environment:
+      GITHUB_OWNER: ${GITHUB_OWNER:-}
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      PORT: 9101
+    ports:
+      - "9101:9101"
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.25.0
+    command:
+      - --config.file=/etc/blackbox_exporter/blackbox.yml
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+    ports:
+      - "9115:9115"
+    restart: unless-stopped

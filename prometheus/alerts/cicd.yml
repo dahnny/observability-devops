@@ -1,0 +1,38 @@
+groups:
+  - name: cicd
+    rules:
+      - alert: DoraExporterNotConfigured
+        expr: dora_exporter_configured == 0
+        for: 15m
+        labels:
+          severity: info
+          service: dora-exporter
+        annotations:
+          summary: "DORA exporter is missing GitHub owner/repo configuration"
+          current_value: "{{ $value | printf \"%.0f\" }}"
+          dashboard_url: "http://localhost:3000/d/dora-metrics/dora-metrics"
+          runbook_url: "runbooks/cicd.md"
+
+      - alert: ChangeFailureRateHigh
+        expr: dora_change_failure_rate_percent > 15
+        for: 10m
+        labels:
+          severity: warning
+          service: ci-cd
+        annotations:
+          summary: "Change failure rate is above 15%"
+          current_value: "{{ $value | printf \"%.2f\" }}%"
+          dashboard_url: "http://localhost:3000/d/dora-metrics/dora-metrics"
+          runbook_url: "runbooks/cicd.md"
+
+      - alert: MTTRTooHigh
+        expr: dora_mttr_seconds > 3600
+        for: 10m
+        labels:
+          severity: warning
+          service: ci-cd
+        annotations:
+          summary: "Mean time to restore is above 1 hour"
+          current_value: "{{ $value | printf \"%.0f\" }}s"
+          dashboard_url: "http://localhost:3000/d/dora-metrics/dora-metrics"
+          runbook_url: "runbooks/cicd.md"

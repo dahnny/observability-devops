@@ -1,0 +1,51 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "type": "gauge",
+      "title": "Availability SLI",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "targets": [{"expr": "100 * sum(rate(http_requests_total{status_code!~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 1)", "refId": "A"}]
+    },
+    {
+      "id": 2,
+      "type": "gauge",
+      "title": "Latency SLI Under 500ms",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "targets": [{"expr": "100 * sum(rate(http_request_duration_seconds_bucket{le=\"0.5\",status_code!~\"5..\"}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{status_code!~\"5..\"}[5m])), 1)", "refId": "A"}]
+    },
+    {
+      "id": 3,
+      "type": "bargauge",
+      "title": "Error Budget Remaining",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "targets": [{"expr": "100 - (100 * sum(rate(http_requests_total{status_code=~\"5..\"}[1h])) / clamp_min(sum(rate(http_requests_total[1h])), 1))", "refId": "A"}]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Burn Rate",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 1)", "legendFormat": "5m error ratio", "refId": "A"},
+        {"expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[1h])) / clamp_min(sum(rate(http_requests_total[1h])), 1)", "legendFormat": "1h error ratio", "refId": "B"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["slo"],
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "SLO Error Budget",
+  "uid": "slo-error-budget",
+  "version": 2
+}
