@@ -1,0 +1,12 @@
+project_name = "hng-observability"
+
+# Use the Linux override only on Linux hosts where / can be mounted with rslave.
+compose_files = ["docker-compose.yml"]
+
+# Keep real secrets in terraform.tfvars, which is ignored by git.
+slack_webhook_url = ""
+
+# Used by the DORA exporter.
+github_owner = ""
+github_repo  = ""
+github_token = ""

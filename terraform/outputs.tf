@@ -12,3 +12,8 @@ output "prometheus_url" {
   description = "Local Prometheus URL."
   value       = "http://localhost:9090"
 }
+
+output "alertmanager_url" {
+  description = "Local Alertmanager URL."
+  value       = "http://localhost:9093"
+}

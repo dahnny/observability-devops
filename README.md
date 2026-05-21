@@ -6,27 +6,39 @@ metrics, and a sample instrumented FastAPI service.
 
 ## One-Command Deployment
 
+Terraform is the required entrypoint for the submission. It provisions the full
+Docker Compose stack and all mounted configuration comes from version-controlled
+files in this repository.
+
 ```sh
-cp .env.example .env
-make up
+terraform -chdir=terraform init && terraform -chdir=terraform apply -auto-approve
 ```
 
-Grafana runs at http://localhost:3000 with `admin` / `admin` unless changed in
-`.env`.
+Optional credentials can be provided through Terraform variables:
+
+```sh
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+```
+
+Then edit `terraform/terraform.tfvars` with `slack_webhook_url`,
+`github_owner`, `github_repo`, and `github_token`. The file is ignored by git.
+
+Grafana runs at http://localhost:3000 with `admin` / `admin`.
 
 Linux host-mode deployment with fuller node-exporter visibility:
 
 ```sh
-make up-linux
+terraform -chdir=terraform apply -auto-approve -var='compose_files=["docker-compose.yml","docker-compose.linux.yml"]'
 ```
 
-Terraform wrapper:
+To tear down the Terraform-provisioned stack:
 
 ```sh
-cd terraform
-terraform init
-terraform apply
+terraform -chdir=terraform destroy -auto-approve
 ```
+
+`make up` and `make up-linux` are developer shortcuts only; use Terraform for
+submission evidence.
 
 ## Services
 
@@ -48,15 +60,18 @@ terraform apply
 - Grafana reads Prometheus, Loki, and Tempo using provisioned datasource files.
 - Alertmanager routes Prometheus alerts to `#DevOps-Alerts` through
   `SLACK_WEBHOOK_URL`.
+- Prometheus scrape configs, alert rules, Alertmanager routing, Loki/Tempo config,
+  Grafana datasources, and dashboard JSON are all committed and mounted by the
+  Terraform-provisioned Compose stack. No Grafana UI changes are required.
 
 ## GitHub DORA Metrics
 
-Set these values in `.env`:
+Set these values in `terraform/terraform.tfvars`:
 
-```sh
-GITHUB_OWNER=your-org
-GITHUB_REPO=your-repo
-GITHUB_TOKEN=github_pat_or_token
+```hcl
+github_owner = "your-org"
+github_repo  = "your-repo"
+github_token = "github_pat_or_token"
 ```
 
 The token needs read access to GitHub Actions workflow runs. The exporter exposes
@@ -92,7 +107,84 @@ the sample app to link directly to Tempo traces.
 
 ## Validation
 
+The stack was validated on 2026-05-20 using the Terraform entrypoint:
+
 ```sh
+terraform -chdir=terraform apply -auto-approve
+```
+
+Result: Terraform completed with no pending changes and reported the local
+service URLs for Grafana, Prometheus, Alertmanager, and the project name.
+
+Static checks run:
+
+```sh
+terraform -chdir=terraform fmt -check
+terraform -chdir=terraform validate
+docker compose config --no-interpolate
+python3 -m py_compile sample-app/app/main.py dora-exporter/app.py
+jq empty grafana/dashboards/*.json
+docker compose exec -T otel-collector /otelcol-contrib validate --config=/etc/otelcol-contrib/otel-collector-config.yml
+```
+
+Result: all checks passed. `docker compose config --no-interpolate` is used so
+the generated Compose configuration can be checked without printing secret
+values from `.env` or Terraform variables.
+
+Runtime service checks run:
+
+```sh
+docker compose ps
+curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health
+curl -s -o /dev/null -w '%{http_code}' http://localhost:9090/-/ready
+curl -s -o /dev/null -w '%{http_code}' http://localhost:9093/-/ready
+curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health
+curl -s -o /dev/null -w '%{http_code}' http://localhost:3100/ready
+curl -s -o /dev/null -w '%{http_code}' http://localhost:3200/ready
+curl -s -o /dev/null -w '%{http_code}' http://localhost:9115/-/healthy
+curl -s -o /dev/null -w '%{http_code}' http://localhost:9101/metrics
+curl -s -o /dev/null -w '%{http_code}' http://localhost:8889/metrics
+```
+
+Result: all containers were up. HTTP checks returned 200 for the sample app,
+Prometheus, Alertmanager, Grafana, Loki, Tempo, Blackbox Exporter, DORA Exporter,
+and the OTel Collector Prometheus exporter.
+
+Mounted configuration paths checked inside containers:
+
+```text
+prometheus:/etc/prometheus/prometheus.yml
+alertmanager:/etc/alertmanager/alertmanager.yml
+grafana:/etc/grafana/provisioning/datasources/datasources.yml
+grafana:/var/lib/grafana/dashboards/unified-observability.json
+loki:/etc/loki/loki-config.yml
+tempo:/etc/tempo/tempo.yml
+otel-collector:/etc/otelcol-contrib/otel-collector-config.yml
+blackbox:/etc/blackbox_exporter/blackbox.yml
+```
+
+Result: all required mounted paths were present and readable by their services.
+
+Telemetry checks run:
+
+```sh
+curl -s -G http://localhost:9090/api/v1/query --data-urlencode 'query=up'
+curl -s -G http://localhost:9090/api/v1/query --data-urlencode 'query=http_requests_total{job="sample-app"}'
+curl -s -G 'http://localhost:3100/loki/api/v1/query' --data-urlencode 'query={service_name="sample-app"}'
+curl -s -G http://localhost:3200/api/search --data-urlencode 'tags=service.name=sample-app'
+curl -s http://localhost:9101/metrics
+```
+
+Result: Prometheus reported all scrape targets as `up == 1`, the sample app
+exported request metrics, Loki returned `sample-app` log streams with `trace_id`
+labels, and Tempo returned searchable `sample-app` traces. The DORA exporter was
+reachable; it reports `dora_exporter_configured 0` until `github_owner`,
+`github_repo`, and `github_token` are supplied through Terraform variables.
+
+Reusable local validation commands:
+
+```sh
+terraform -chdir=terraform validate
 make validate
 python3 -m py_compile sample-app/app/main.py dora-exporter/app.py
 jq empty grafana/dashboards/*.json
